@@ -10,7 +10,7 @@ npx llm-path
 
 ## 它解决什么
 
-国内最常见的情况：Clash 开了，浏览器能翻，Claude Code 还是卡住。原因几乎总是终端没吃到 HTTPS_PROXY，或端口不是 7890 / 7897。
+国内最常见的情况：Clash 开了，浏览器能翻，Claude Code 还是卡住。原因几乎总是终端没吃到 HTTPS_PROXY，或端口不是 7890 / 7897。**Codex 和 Claude Code 一样会卡在代理没进终端。**
 
 cc-switch 换的是供应商配置。OmniRoute 是网关。GitHub520 改 hosts。llm-path 只测网络：直连、环境变量代理、本地 7890/7897，哪条能打到 Anthropic / OpenAI / DeepSeek / 智谱 / Kimi / 通义。
 
@@ -29,9 +29,12 @@ npx llm-path --json
 
 - Anthropic / OpenAI / Gemini
 - DeepSeek / 智谱 / Kimi / MiniMax / 通义
+- ChatGPT（Codex）
 - 设置了自定义 Base URL 也会测
 
-401、403 算网络通了。跑完给红绿表、可复制的代理环境变量、以及 Claude Code 的 env 配置。
+401、403 算网络通了。跑完给红绿表、可复制的代理环境变量、Claude Code 的 env 配置，以及 Codex 的 `HTTPS_PROXY` + `codex` 启动命令（Codex 没有给自身 API 流量用的 config.toml 代理键，要在同一终端里 export 再跑）。
+
+另外会探测 `https://chatgpt.com`（Codex 的 ChatGPT 登录/后端）。设置了 `OPENAI_BASE_URL` 也会测。只检查 `~/.codex/config.toml` / `CODEX_HOME` 是否存在，不读文件内容、不打印密钥。
 
 ## 协议
 
@@ -83,6 +86,7 @@ For each API, via **direct**, `HTTPS_PROXY`/`HTTP_PROXY`, and `http://127.0.0.1:
 
 - `https://api.anthropic.com`
 - `https://api.openai.com`
+- `https://chatgpt.com` (Codex ChatGPT-auth backend)
 - `https://generativelanguage.googleapis.com`
 - `https://api.deepseek.com`
 - `https://open.bigmodel.cn`
@@ -94,12 +98,14 @@ Also probes `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` when set.
 
 Classification: `ok` | `dns` | `tls` | `timeout` | `http_<status>` — **401/403 = reachable**.
 
+Copy-paste includes Claude Code `settings.json` **and** Codex: export `HTTPS_PROXY` in the same terminal, then run `codex`. Codex has no HTTP-proxy key in `config.toml` for its own API traffic (`features.network_proxy` is a sandbox listener). llm-path only reports whether `~/.codex/config.toml` / `$CODEX_HOME/config.toml` exists — it never reads the file (no API keys).
+
 ## Screenshot / GIF
 
 <!-- drop a terminal recording here -->
 
 ```text
-[ screenshot: red/green table + copy-paste HTTPS_PROXY / settings.json ]
+[ screenshot: red/green table + copy-paste HTTPS_PROXY / settings.json / Codex env ]
 ```
 
 ## Install from source

@@ -8,6 +8,7 @@ export const DEFAULT_TIMEOUT_MS = 4000;
 export const DEFAULT_TARGETS: { name: string; url: string }[] = [
   { name: 'Anthropic', url: 'https://api.anthropic.com' },
   { name: 'OpenAI', url: 'https://api.openai.com' },
+  { name: 'ChatGPT', url: 'https://chatgpt.com' },
   { name: 'Google AI', url: 'https://generativelanguage.googleapis.com' },
   { name: 'DeepSeek', url: 'https://api.deepseek.com' },
   { name: 'Zhipu BigModel', url: 'https://open.bigmodel.cn' },
@@ -257,13 +258,46 @@ export async function runProbes(options: ProbeOptions = {}): Promise<ProbeResult
   return Promise.all(jobs);
 }
 
-/** Pick the best working Anthropic path (reachable, lowest latency). */
-export function bestAnthropicPath(results: ProbeResult[]): ProbeResult | undefined {
-  const candidates = results.filter(
-    (r) =>
-      (r.name === 'Anthropic' || r.url.includes('api.anthropic.com')) &&
-      isReachable(r.classification),
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/** Codex-relevant hosts: OpenAI API and ChatGPT (ChatGPT-auth backend). */
+export function isCodexUrl(url: string): boolean {
+  const host = hostOf(url);
+  if (!host) {
+    const u = url.toLowerCase();
+    return u.includes('api.openai.com') || u.includes('chatgpt.com');
+  }
+  return host === 'api.openai.com' || host === 'chatgpt.com' || host.endsWith('.chatgpt.com');
+}
+
+/** True when this probe is a Codex / OpenAI / ChatGPT endpoint. */
+export function isCodexTarget(r: Pick<ProbeResult, 'name' | 'url'>): boolean {
+  if (r.name === 'OpenAI' || r.name === 'ChatGPT' || r.name === 'OPENAI_BASE_URL') return true;
+  return isCodexUrl(r.url);
+}
+
+function isAnthropicTarget(r: Pick<ProbeResult, 'name' | 'url'>): boolean {
+  return (
+    r.name === 'Anthropic' ||
+    r.name === 'ANTHROPIC_BASE_URL' ||
+    r.url.includes('api.anthropic.com')
   );
+}
+
+/**
+ * Prefer a working proxy path over direct (China / Clash case), then lowest latency.
+ */
+export function pickBestReachable(
+  results: ProbeResult[],
+  match: (r: ProbeResult) => boolean,
+): ProbeResult | undefined {
+  const candidates = results.filter((r) => match(r) && isReachable(r.classification));
   if (candidates.length === 0) return undefined;
   return candidates.reduce((a, b) => {
     const proxyScore = (p: string) => (p === 'direct' ? 1 : 0);
@@ -272,4 +306,14 @@ export function bestAnthropicPath(results: ProbeResult[]): ProbeResult | undefin
     if (sa !== sb) return sa < sb ? a : b;
     return a.latencyMs <= b.latencyMs ? a : b;
   });
+}
+
+/** Pick the best working Anthropic path (reachable, lowest latency). */
+export function bestAnthropicPath(results: ProbeResult[]): ProbeResult | undefined {
+  return pickBestReachable(results, isAnthropicTarget);
+}
+
+/** Best path that reaches Codex: api.openai.com, chatgpt.com, or OPENAI_BASE_URL. */
+export function bestCodexPath(results: ProbeResult[]): ProbeResult | undefined {
+  return pickBestReachable(results, isCodexTarget);
 }
