@@ -180,7 +180,7 @@ describe('formatCodexConfigLines / formatCodexFix', () => {
       usingCodexHomeEnv: false,
     });
     expect(lines.join('\n')).toContain('/home/tester/.codex/config.toml');
-    expect(lines.join('\n')).toContain('exists');
+    expect(lines.join('\n')).toContain('存在');
     expect(lines.join('\n')).not.toMatch(/sk-|api[_-]?key/i);
   });
 
@@ -207,12 +207,12 @@ describe('formatCodexConfigLines / formatCodexFix', () => {
       },
     );
     expect(block).toContain('## Codex');
-    expect(block).toContain('Best Codex/OpenAI path');
+    expect(block).toContain('最佳 Codex/OpenAI 路径');
     expect(block).toContain('export HTTPS_PROXY=http://127.0.0.1:7890');
     expect(block).toMatch(/^codex$/m);
-    expect(block).toContain('not found');
-    expect(block).toContain('no HTTP-proxy key');
-    expect(block).toContain('before');
+    expect(block).toContain('不存在');
+    expect(block).toContain('没有给自身 API 流量用的 HTTP 代理键');
+    expect(block).toContain('前先 export');
   });
 });
 
@@ -253,7 +253,7 @@ describe('formatFixBlocks Codex section', () => {
     expect(block).toContain('## Codex');
     expect(block).toContain('export HTTPS_PROXY=http://127.0.0.1:7890');
     expect(block).toContain('/x/.codex/config.toml');
-    expect(block).toContain('exists');
+    expect(block).toContain('存在');
   });
 });
 

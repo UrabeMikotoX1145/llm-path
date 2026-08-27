@@ -1,5 +1,12 @@
-import { classLabel, isReachable } from './classify.js';
+import { isReachable } from './classify.js';
 import type { CodexConfigStatus } from './codex.js';
+import {
+  DEFAULT_LOCALE,
+  displayClassLabel,
+  displayPathLabel,
+  messages,
+  type Locale,
+} from './i18n.js';
 import { bestAnthropicPath, bestCodexPath, type ProbeResult } from './probes.js';
 import type { LocalProxyStatus, ProxyEnv } from './proxy.js';
 
@@ -19,53 +26,72 @@ const c = {
   cyan: useColor ? '\u001b[36m' : '',
 };
 
-function pad(s: string, n: number): string {
+function visibleWidth(s: string): number {
   const visible = s.replace(/\u001b\[[0-9;]*m/g, '');
-  if (visible.length >= n) return s;
-  return s + ' '.repeat(n - visible.length);
+  let w = 0;
+  for (const ch of visible) {
+    const cp = ch.codePointAt(0) ?? 0;
+    w += cp > 0xff ? 2 : 1;
+  }
+  return w;
 }
 
-function statusCell(r: ProbeResult): string {
-  const label = classLabel(r.classification);
+function pad(s: string, n: number): string {
+  const w = visibleWidth(s);
+  if (w >= n) return s;
+  return s + ' '.repeat(n - w);
+}
+
+function statusCell(r: ProbeResult, locale: Locale): string {
+  const label = displayClassLabel(r.classification, locale);
   if (isReachable(r.classification)) {
     return `${c.green}● ${label}${c.reset}`;
   }
   return `${c.red}● ${label}${c.reset}`;
 }
 
-function pathLabel(path: string): string {
-  if (path === 'direct') return 'direct';
-  if (path === 'env') return 'env proxy';
-  return path;
+function pathLabel(path: string, locale: Locale): string {
+  return displayPathLabel(path, locale);
 }
 
 /** Format ANSI (or plain) red/green results table. */
-export function formatTable(results: ProbeResult[]): string {
+export function formatTable(results: ProbeResult[], locale: Locale = DEFAULT_LOCALE): string {
+  const t = messages[locale];
   const cols = {
-    name: Math.max(4, ...results.map((r) => r.name.length), 12),
-    path: Math.max(4, ...results.map((r) => pathLabel(r.path).length), 10),
-    status: 14,
-    ms: 8,
+    name: Math.max(
+      4,
+      ...results.map((r) => visibleWidth(r.name)),
+      visibleWidth(t.tableApi),
+      12,
+    ),
+    path: Math.max(
+      4,
+      ...results.map((r) => visibleWidth(pathLabel(r.path, locale))),
+      visibleWidth(t.tablePath),
+      10,
+    ),
+    status: Math.max(14, visibleWidth(t.tableStatus) + 4),
+    ms: Math.max(8, visibleWidth(t.tableMs)),
   };
 
   const header =
-    pad('API', cols.name) +
+    pad(t.tableApi, cols.name) +
     '  ' +
-    pad('Path', cols.path) +
+    pad(t.tablePath, cols.path) +
     '  ' +
-    pad('Status', cols.status) +
+    pad(t.tableStatus, cols.status) +
     '  ' +
-    pad('ms', cols.ms);
+    pad(t.tableMs, cols.ms);
 
-  const sep = '-'.repeat(header.length);
+  const sep = '-'.repeat(visibleWidth(header));
 
   const rows = results.map((r) => {
     return (
       pad(r.name, cols.name) +
       '  ' +
-      pad(pathLabel(r.path), cols.path) +
+      pad(pathLabel(r.path, locale), cols.path) +
       '  ' +
-      pad(statusCell(r), cols.status) +
+      pad(statusCell(r, locale), cols.status) +
       '  ' +
       pad(String(r.latencyMs), cols.ms)
     );
@@ -81,22 +107,27 @@ function suggestedProxyUrl(best: ProbeResult | undefined, locals: LocalProxyStat
   return 'http://127.0.0.1:7890';
 }
 
-function existLabel(exists: boolean): string {
-  return exists ? 'exists' : 'not found';
+function existLabel(exists: boolean, locale: Locale): string {
+  const t = messages[locale];
+  return exists ? t.exists : t.notFound;
 }
 
 /** Existence-only Codex config lines (never file contents). */
-export function formatCodexConfigLines(cfg: CodexConfigStatus): string[] {
+export function formatCodexConfigLines(
+  cfg: CodexConfigStatus,
+  locale: Locale = DEFAULT_LOCALE,
+): string[] {
+  const t = messages[locale];
   const lines: string[] = [];
   if (cfg.usingCodexHomeEnv) {
-    lines.push(`Codex config (CODEX_HOME): ${cfg.configPath}  ${existLabel(cfg.configExists)}`);
+    lines.push(`${t.codexConfigHome}: ${cfg.configPath}  ${existLabel(cfg.configExists, locale)}`);
     if (cfg.defaultConfigPath !== cfg.configPath) {
       lines.push(
-        `  default ~/.codex/config.toml: ${cfg.defaultConfigPath}  ${existLabel(cfg.defaultConfigExists)}`,
+        `  ${t.defaultCodexConfig}: ${cfg.defaultConfigPath}  ${existLabel(cfg.defaultConfigExists, locale)}`,
       );
     }
   } else {
-    lines.push(`Codex config: ${cfg.configPath}  ${existLabel(cfg.configExists)}`);
+    lines.push(`${t.codexConfig}: ${cfg.configPath}  ${existLabel(cfg.configExists, locale)}`);
   }
   return lines;
 }
@@ -106,42 +137,38 @@ export function formatCodexFix(
   results: ProbeResult[],
   locals: LocalProxyStatus[],
   cfg?: CodexConfigStatus,
+  locale: Locale = DEFAULT_LOCALE,
 ): string {
+  const t = messages[locale];
   const best = bestCodexPath(results);
   const proxy = suggestedProxyUrl(best, locals);
   const lines: string[] = [];
 
-  lines.push(`${c.bold}${c.cyan}## Codex (OpenAI Codex CLI)${c.reset}`);
+  lines.push(`${c.bold}${c.cyan}${t.codexHeading}${c.reset}`);
   lines.push('');
 
   if (best) {
     lines.push(
-      `${c.green}Best Codex/OpenAI path:${c.reset} ${pathLabel(best.path)} (${best.latencyMs}ms) via ${best.name}`,
+      `${c.green}${t.bestCodexPrefix}:${c.reset} ${pathLabel(best.path, locale)} (${best.latencyMs}ms) ${t.via} ${best.name}`,
     );
   } else {
-    lines.push(
-      `${c.yellow}No reachable Codex/OpenAI path found.${c.reset} Start Clash (mixed port 7890) or set a working HTTPS_PROXY, then re-run.`,
-    );
+    lines.push(`${c.yellow}${t.noCodex}${c.reset}`);
   }
   lines.push('');
 
   if (cfg) {
-    lines.push(...formatCodexConfigLines(cfg));
+    lines.push(...formatCodexConfigLines(cfg, locale));
     lines.push('');
   }
 
-  lines.push(`${c.dim}# Shell — export in this terminal, then run:  codex${c.reset}`);
+  lines.push(`${c.dim}${t.shellCodex}${c.reset}`);
   lines.push(`export HTTPS_PROXY=${proxy}`);
   lines.push(`export HTTP_PROXY=${proxy}`);
   lines.push(`export ALL_PROXY=${proxy}`);
   lines.push(`codex`);
   lines.push('');
-  lines.push(
-    `${c.dim}# ~/.codex/config.toml  — Codex has no HTTP-proxy key for its own API traffic.${c.reset}`,
-  );
-  lines.push(
-    `${c.dim}# (features.network_proxy is a sandbox listener, not Clash.) Export the vars above before \`codex\`.${c.reset}`,
-  );
+  lines.push(`${c.dim}${t.codexNoProxyKey}${c.reset}`);
+  lines.push(`${c.dim}${t.codexSandboxNote}${c.reset}`);
 
   return lines.join('\n');
 }
@@ -152,32 +179,32 @@ export function formatFixBlocks(
   locals: LocalProxyStatus[],
   proxyEnv: ProxyEnv,
   codexConfig?: CodexConfigStatus,
+  locale: Locale = DEFAULT_LOCALE,
 ): string {
+  const t = messages[locale];
   const best = bestAnthropicPath(results);
   const proxy = suggestedProxyUrl(best, locals);
   const lines: string[] = [];
 
-  lines.push(`${c.bold}${c.cyan}## Suggested fix (copy-paste)${c.reset}`);
+  lines.push(`${c.bold}${c.cyan}${t.fixHeading}${c.reset}`);
   lines.push('');
 
   if (best) {
     lines.push(
-      `${c.green}Best Anthropic path:${c.reset} ${pathLabel(best.path)} (${best.latencyMs}ms)`,
+      `${c.green}${t.bestAnthropicPrefix}:${c.reset} ${pathLabel(best.path, locale)} (${best.latencyMs}ms)`,
     );
   } else {
-    lines.push(
-      `${c.yellow}No reachable Anthropic path found.${c.reset} Start Clash (mixed port 7890) or set a working HTTPS_PROXY, then re-run.`,
-    );
+    lines.push(`${c.yellow}${t.noAnthropic}${c.reset}`);
   }
   lines.push('');
 
-  lines.push(`${c.dim}# Shell (bash/zsh)${c.reset}`);
+  lines.push(`${c.dim}${t.shellBash}${c.reset}`);
   lines.push(`export HTTPS_PROXY=${proxy}`);
   lines.push(`export HTTP_PROXY=${proxy}`);
   lines.push(`export ALL_PROXY=${proxy}`);
   lines.push('');
 
-  lines.push(`${c.dim}# Claude Code ~/.claude/settings.json  (env snippet)${c.reset}`);
+  lines.push(`${c.dim}${t.claudeSettings}${c.reset}`);
   lines.push(`{
   "env": {
     "HTTPS_PROXY": "${proxy}",
@@ -187,28 +214,26 @@ export function formatFixBlocks(
 }`);
   lines.push('');
 
-  lines.push(formatCodexFix(results, locals, codexConfig));
+  lines.push(formatCodexFix(results, locals, codexConfig, locale));
   lines.push('');
 
   const listening = locals.filter((l) => l.listening);
-  lines.push(`${c.bold}Local proxy ports${c.reset}`);
+  lines.push(`${c.bold}${t.localProxyPorts}${c.reset}`);
   for (const l of locals) {
     const mark = l.listening
-      ? `${c.green}listening${c.reset}`
-      : `${c.red}closed${c.reset}`;
+      ? `${c.green}${t.listening}${c.reset}`
+      : `${c.red}${t.closed}${c.reset}`;
     lines.push(`  ${l.host}:${l.port}  ${mark}${l.latencyMs != null ? ` (${l.latencyMs}ms)` : ''}`);
   }
   if (listening.length === 0) {
-    lines.push(
-      `  ${c.dim}Tip: Clash / Clash Verge mixed-port is often 7890; some builds use 7897.${c.reset}`,
-    );
+    lines.push(`  ${c.dim}${t.clashTip}${c.reset}`);
   }
   lines.push('');
 
-  lines.push(`${c.bold}Env proxy vars${c.reset}`);
-  lines.push(`  HTTPS_PROXY=${proxyEnv.httpsProxy ?? '(unset)'}`);
-  lines.push(`  HTTP_PROXY=${proxyEnv.httpProxy ?? '(unset)'}`);
-  lines.push(`  ALL_PROXY=${proxyEnv.allProxy ?? '(unset)'}`);
+  lines.push(`${c.bold}${t.envProxyVars}${c.reset}`);
+  lines.push(`  HTTPS_PROXY=${proxyEnv.httpsProxy ?? t.unset}`);
+  lines.push(`  HTTP_PROXY=${proxyEnv.httpProxy ?? t.unset}`);
+  lines.push(`  ALL_PROXY=${proxyEnv.allProxy ?? t.unset}`);
 
   return lines.join('\n');
 }
@@ -220,13 +245,14 @@ export interface ReportInput {
   codexConfig?: CodexConfigStatus;
 }
 
-export function formatReport(input: ReportInput): string {
+export function formatReport(input: ReportInput, locale: Locale = DEFAULT_LOCALE): string {
+  const t = messages[locale];
   const parts = [
-    `${c.bold}llm-path${c.reset} — LLM API path diagnostics`,
+    `${c.bold}llm-path${c.reset} — ${t.reportTitle.replace(/^llm-path — /, '')}`,
     '',
-    formatTable(input.results),
+    formatTable(input.results, locale),
     '',
-    formatFixBlocks(input.results, input.locals, input.proxyEnv, input.codexConfig),
+    formatFixBlocks(input.results, input.locals, input.proxyEnv, input.codexConfig, locale),
   ];
   return parts.join('\n');
 }

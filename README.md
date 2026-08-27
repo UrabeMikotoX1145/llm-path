@@ -21,6 +21,12 @@ npx llm-path
 npx llm-path --json
 ```
 
+图形界面（页面上点【中文】【English】切换，选过会记住）：
+
+```bash
+npx llm-path --gui
+```
+
 从源码安装见 package.json 的 test / build / start。
 
 ## 探测列表
@@ -76,6 +82,7 @@ Options:
 llm-path --help
 llm-path --version
 llm-path --json
+llm-path --gui
 ```
 
 Exit code is always `0` (pure diagnostics).

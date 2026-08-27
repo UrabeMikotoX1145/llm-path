@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { detectCodexConfig } from './codex.js';
+import { startGuiServer } from './gui.js';
+import { DEFAULT_LOCALE, messages } from './i18n.js';
 import { detectLocalProxies, readProxyEnv } from './proxy.js';
 import { runProbes } from './probes.js';
 import { formatJson, formatReport } from './report.js';
@@ -20,52 +22,72 @@ function readVersion(): string {
   }
 }
 
+export type CliMode = 'help' | 'version' | 'gui' | 'json' | 'report';
+
+export function parseArgs(argv: string[]): { mode: CliMode } {
+  if (argv.includes('--help') || argv.includes('-h')) return { mode: 'help' };
+  if (argv.includes('--version') || argv.includes('-V')) return { mode: 'version' };
+  if (argv.includes('--gui') || argv.includes('-g')) return { mode: 'gui' };
+  if (argv.includes('--json')) return { mode: 'json' };
+  return { mode: 'report' };
+}
+
 function printHelp(): void {
+  const t = messages[DEFAULT_LOCALE];
   const text = `
 llm-path v${VERSION}
 
-Diagnose why Claude Code / Codex / Cursor cannot reach LLM APIs
-(especially on Chinese networks with Clash).
+${t.helpIntro}
 
-Probes Anthropic, OpenAI, ChatGPT (Codex), Gemini, and China LLM APIs
-via direct / env proxy / 127.0.0.1:7890 / 7897. Honors OPENAI_BASE_URL.
-Prints Claude settings.json and Codex HTTPS_PROXY copy-paste.
+${t.helpProbes}
 
-Usage:
+${t.helpUsage}
   llm-path [options]
 
-Options:
-  --json       Print machine-readable JSON instead of a table
-  --help, -h   Show this help
-  --version, -V  Show version
+${t.helpOptions}
+  --json       ${t.helpJson}
+  --gui, -g    ${t.helpGui}
+  --help, -h   ${t.helpHelp}
+  --version, -V  ${t.helpVersion}
 
-Exit code is always 0 (diagnostic tool).
+${t.helpExit}
 
-Examples:
+${t.helpExamples}
   npx llm-path
   llm-path --json
+  npx llm-path --gui
 `.trim();
   console.log(text);
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
-  if (argv.includes('--help') || argv.includes('-h')) {
+  const { mode } = parseArgs(argv);
+  if (mode === 'help') {
     printHelp();
     return;
   }
-  if (argv.includes('--version') || argv.includes('-V')) {
+  if (mode === 'version') {
     console.log(VERSION);
     return;
   }
 
-  const asJson = argv.includes('--json');
+  if (mode === 'gui') {
+    const t = messages[DEFAULT_LOCALE];
+    const handle = await startGuiServer({
+      host: '127.0.0.1',
+      port: 8787,
+      openBrowser: true,
+    });
+    console.log(`${t.guiServing} ${handle.url}  （${t.guiQuit}）`);
+    return;
+  }
 
   const [results, locals] = await Promise.all([runProbes(), detectLocalProxies()]);
   const proxyEnv = readProxyEnv();
   const codexConfig = detectCodexConfig();
   const input = { results, locals, proxyEnv, codexConfig };
 
-  if (asJson) {
+  if (mode === 'json') {
     console.log(formatJson(input));
   } else {
     console.log(formatReport(input));

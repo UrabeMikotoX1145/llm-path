@@ -12,7 +12,7 @@ function mockResult(partial: Partial<ProbeResult> & Pick<ProbeResult, 'name' | '
 }
 
 describe('formatTable', () => {
-  it('renders API / Path / Status / ms columns', () => {
+  it('renders API / 路径 / 状态 / ms columns (Chinese default)', () => {
     const table = formatTable([
       mockResult({ name: 'Anthropic', path: 'direct', classification: 'ok', latencyMs: 120 }),
       mockResult({
@@ -24,14 +24,25 @@ describe('formatTable', () => {
       }),
     ]);
     expect(table).toContain('API');
-    expect(table).toContain('Path');
-    expect(table).toContain('Status');
+    expect(table).toContain('路径');
+    expect(table).toContain('状态');
     expect(table).toContain('Anthropic');
     expect(table).toContain('OpenAI');
-    expect(table).toContain('direct');
+    expect(table).toContain('直连');
     expect(table).toContain('127.0.0.1:7890');
+    expect(table).toMatch(/通/);
+    expect(table).toMatch(/超时/);
+  });
+
+  it('English locale keeps original headers', () => {
+    const table = formatTable(
+      [mockResult({ name: 'Anthropic', path: 'direct', classification: 'ok', latencyMs: 120 })],
+      'en',
+    );
+    expect(table).toContain('Path');
+    expect(table).toContain('Status');
+    expect(table).toContain('direct');
     expect(table).toMatch(/OK/);
-    expect(table).toMatch(/Timeout/i);
   });
 });
 
@@ -63,8 +74,8 @@ describe('formatFixBlocks', () => {
     expect(block).toContain('export HTTPS_PROXY=http://127.0.0.1:7890');
     expect(block).toContain('export HTTP_PROXY=http://127.0.0.1:7890');
     expect(block).toContain('"HTTPS_PROXY": "http://127.0.0.1:7890"');
-    expect(block).toContain('Best Anthropic path');
-    expect(block).toContain('listening');
+    expect(block).toContain('最佳 Anthropic 路径');
+    expect(block).toContain('在听');
   });
 
   it('falls back when Anthropic unreachable', () => {
@@ -80,7 +91,7 @@ describe('formatFixBlocks', () => {
       { host: '127.0.0.1', port: 7890, listening: false },
       { host: '127.0.0.1', port: 7897, listening: false },
     ], proxyEnv);
-    expect(block).toContain('No reachable Anthropic path');
+    expect(block).toContain('没找到能通的 Anthropic 路径');
     expect(block).toContain('export HTTPS_PROXY=http://127.0.0.1:7890');
   });
 });
